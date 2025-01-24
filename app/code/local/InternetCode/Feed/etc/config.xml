@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <InternetCode_Feed>
+            <version>0.1.0</version>
+        </InternetCode_Feed>
+    </modules>
+    <global>
+        <models>
+            <ic_feed>
+                <class>InternetCode_Feed_Model</class>
+            </ic_feed>
+        </models>
+        <helpers>
+            <feed>
+                <class>InternetCode_Feed_Helper</class>
+            </feed>
+        </helpers>
+    </global>
+</config>
