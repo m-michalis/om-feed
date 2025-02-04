@@ -2,7 +2,7 @@
   "name": "m-michalis/om-feed",
   "type": "magento-module",
   "license": "GPL-3.0",
-  "version": "0.1.0",
+  "version": "v0.1.0",
   "homepage": "https://github.com/m-michalis/om-feed",
   "description":"Assemble products with up to spec sql query",
   "keywords": [
