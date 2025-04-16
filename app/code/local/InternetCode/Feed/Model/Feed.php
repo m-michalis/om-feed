@@ -7,6 +7,11 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
      * removes children from collection and adds them to their respective parent's 'associated_products'
      */
     const FLAG_ASSOCIATIONS = 'configurable_associations';
+
+    /**
+     * Use leaf categories. Only products that exist in end categories (categories without other child categories)
+     */
+    const FLAG_LEAF_CATS = 'leaf_categories';
     /** @var array */
     private $_categoryCache = [];
 
@@ -35,7 +40,8 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
      * @var true[]
      */
     protected $_flags = [
-        'no_stock_data' => true
+        'no_stock_data' => true,
+        'leaf_categories' => true
     ];
 
     /**
@@ -149,7 +155,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
          *
          */
         $this->joinTable(
-            ['stock' => 'cataloginventory/stock_status_idx'],
+            ['stock' => 'cataloginventory/stock_status'],
             'product_id=entity_id',
             ['quantity' => 'qty', 'stock_status' => 'stock_status'],
             'stock.stock_id=' . Mage_CatalogInventory_Model_Stock::DEFAULT_STOCK_ID . ' AND stock.website_id=' . $this->getWebsiteId(),
@@ -209,8 +215,10 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
                 'c1.entity_id = c2.parent_id'
             )
             ->reset(Zend_Db_Select::COLUMNS)
-            ->columns(['c1.entity_id'])
-            ->where('c2.entity_id IS NULL');
+            ->columns(['c1.entity_id']);
+        if(isset($this->_flags[self::FLAG_LEAF_CATS]) && $this->_flags[self::FLAG_LEAF_CATS]) {
+            $deepestCategorySelect->where('c2.entity_id IS NULL');
+        }
         if (count($skipCategories)) {
             $deepestCategorySelect->where('c1.entity_id NOT IN (' . implode(',', $skipCategories) . ')');
         }
@@ -258,11 +266,9 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
             /**
              * Fill Category
              */
-            foreach(explode(',',$item->getData('category_ids')) as $categoryId) {
-                if(isset($this->_categoryCache[$item->getData('category_ids')])) {
-                    $item->setData('category', $this->_categoryCache[$categoryId]['category_path']);
-                    break;
-                }
+            $commonCategoryIds = array_values(array_intersect(array_keys($this->_categoryCache),explode(',',$item->getData('category_ids'))));
+            if(isset($commonCategoryIds[0])){
+                $item->setData('category', $this->_categoryCache[$commonCategoryIds[0]]['category_path']);
             }
 
 
