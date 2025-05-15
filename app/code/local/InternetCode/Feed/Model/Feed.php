@@ -484,10 +484,6 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
          * 1.  I/O setup
          * -------------------------------------------------------- */
         $dir = dirname($feedPath);
-        if (!is_dir($dir) && !mkdir($dir, 0777, true)) {
-            throw new RuntimeException("Cannot create directory $dir");
-        }
-
         $io = new Varien_Io_File();
         $io->open(['path' => $dir]);
         $io->setAllowCreateFolders(true);
