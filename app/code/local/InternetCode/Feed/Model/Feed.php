@@ -93,7 +93,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
         $this->_gatherAttributeOptions();
 
         $this->addAttributeToFilter('status',
-            array('eq' => Mage_Catalog_Model_Product_Status::STATUS_ENABLED));
+            ['eq' => Mage_Catalog_Model_Product_Status::STATUS_ENABLED]);
 
         $this->_productLimitationFilters['customer_group_id'] = $this->_config[self::CONFIG_CUS_GROUP] ?? Mage_Customer_Model_Group::NOT_LOGGED_IN_ID;
         $this->_productLimitationFilters['website_id'] = $this->getWebsiteId();
@@ -216,7 +216,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
             )
             ->reset(Zend_Db_Select::COLUMNS)
             ->columns(['c1.entity_id']);
-        if(isset($this->_flags[self::FLAG_LEAF_CATS]) && $this->_flags[self::FLAG_LEAF_CATS]) {
+        if (isset($this->_flags[self::FLAG_LEAF_CATS]) && $this->_flags[self::FLAG_LEAF_CATS]) {
             $deepestCategorySelect->where('c2.entity_id IS NULL');
         }
         if (count($skipCategories)) {
@@ -258,7 +258,7 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
             /**
              * Fill Gallery
              */
-            if(isset($this->_mediaGallery[$item->getId()])){
+            if (isset($this->_mediaGallery[$item->getId()])) {
                 $item->setData('gallery', $this->_mediaGallery[$item->getId()]);
             }
 
@@ -266,11 +266,10 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
             /**
              * Fill Category
              */
-            $commonCategoryIds = array_values(array_intersect(array_keys($this->_categoryCache),explode(',',$item->getData('category_ids'))));
-            if(isset($commonCategoryIds[0])){
+            $commonCategoryIds = array_values(array_intersect(array_keys($this->_categoryCache), explode(',', $item->getData('category_ids'))));
+            if (isset($commonCategoryIds[0])) {
                 $item->setData('category', $this->_categoryCache[$commonCategoryIds[0]]['category_path']);
             }
-
 
 
             /**
@@ -394,7 +393,7 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
 
         $this->_mediaGallery = [];
         foreach ($this->_getReadAdapter()->fetchAll($allMediaSelect) as $image) {
-            if(!isset($this->_mediaGallery[$image['entity_id']])){
+            if (!isset($this->_mediaGallery[$image['entity_id']])) {
                 $this->_mediaGallery[$image['entity_id']] = [];
             }
             $this->_mediaGallery[$image['entity_id']][] = $image['file'];
@@ -417,7 +416,7 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
             )
             ->joinLeft(
                 ['eaov' => $this->getTable('eav/attribute_option_value')],
-                'eao.option_id = eaov.option_id and eaov.store_id = '.$this->getStoreId(),
+                'eao.option_id = eaov.option_id and eaov.store_id = ' . $this->getStoreId(),
                 []
             )
             ->columns([
@@ -436,8 +435,8 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
             ->columns([
                 'attribute_code'
             ])
-            ->where('frontend_input = ?','select')
-            ->where('is_user_defined = ?',1);
+            ->where('frontend_input = ?', 'select')
+            ->where('is_user_defined = ?', 1);
 
         $this->_dropdownAttributes = $this->_getReadAdapter()->fetchCol($select);
     }
@@ -450,20 +449,20 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
      */
     public function getAttributeCodeToId($reverse = false)
     {
-        if(isset($this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse']) && is_array($this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse'])){
+        if (isset($this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse']) && is_array($this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse'])) {
             return $this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse'];
         }
         $select = $this->_getReadAdapter()->select()
             ->from(['eao' => $this->getTable('eav/attribute')])
             ->reset(Zend_Db_Select::COLUMNS)
-            ->where('frontend_input = ?','select')
-            ->where('is_user_defined = ?',1);
-        if($reverse) {
+            ->where('frontend_input = ?', 'select')
+            ->where('is_user_defined = ?', 1);
+        if ($reverse) {
             $select->columns([
                 'attribute_id',
                 'attribute_code'
             ]);
-        }else{
+        } else {
             $select->columns([
                 'attribute_code',
                 'attribute_id'
@@ -472,5 +471,75 @@ GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCatego
         $this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse'] = $this->_getReadAdapter()->fetchPairs($select);
         return $this->_attributeCodeIdCache[$reverse ? 'reverse' : 'no_reverse'];
 
+    }
+
+
+    public function generate(string $handlerName, string $feedPath, callable $mappingCallBack, bool $zip = false)
+    {
+        if (!is_callable($mappingCallBack)) {
+            throw new InvalidArgumentException('Third argument must be a valid callable');
+        }
+
+        /* ----------------------------------------------------------
+         * 1.  I/O setup
+         * -------------------------------------------------------- */
+        $dir = dirname($feedPath);
+        if (!is_dir($dir) && !mkdir($dir, 0777, true)) {
+            throw new RuntimeException("Cannot create directory $dir");
+        }
+
+        $io = new Varien_Io_File();
+        $io->open(['path' => $dir]);
+        $io->setAllowCreateFolders(true);
+        $io->streamOpen($feedPath . '.tmp', 'w+');
+
+        if ($io->fileExists($feedPath) && !$io->isWriteable($feedPath)) {
+            Mage::throwException(sprintf(
+                'File cannot be saved. Please, make sure the directory "%s" is writeable by web server.',
+                $feedPath
+            ));
+        }
+        if ($io->fileExists($feedPath . '.tmp') && !$io->isWriteable($feedPath . '.tmp')) {
+            Mage::throwException(sprintf(
+                'File cannot be saved. Please, make sure the directory "%s" is writeable by web server.',
+                $feedPath . '.tmp'
+            ));
+        }
+
+        /* ----------------------------------------------------------
+         * 2.  Write header
+         * -------------------------------------------------------- */
+
+        Mage::dispatchEvent('omfeed_insert_headers_' . $handlerName, [
+            'io' => $io
+        ]);
+
+        /* ----------------------------------------------------------
+         * 3.  Iterate & delegate tag-writing to the callback
+         * -------------------------------------------------------- */
+        foreach ($this as $product) {
+            /** @var Mage_Catalog_Model_Product $product */
+            $mappingCallBack($io, $product);   // <-- your custom mapping here
+        }
+
+        /* ----------------------------------------------------------
+         * 4.  Close XML and stream
+         * -------------------------------------------------------- */
+        Mage::dispatchEvent('omfeed_insert_footer_' . $handlerName, [
+            'io' => $io
+        ]);
+        $io->streamClose();
+        $io->mv($feedPath . '.tmp', $feedPath);
+
+        if ($zip && class_exists('ZipArchive')) {
+            $zip = new ZipArchive;
+            if ($zip->open($feedPath . '.zip',
+                    ZipArchive::OVERWRITE | ZipArchive::CREATE) === true) {
+                // Add file to the zip file
+                $zip->addFile($feedPath, basename($feedPath));
+                // All files are added, so close the zip file.
+                $zip->close();
+            }
+        }
     }
 }
