@@ -12,6 +12,12 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
      * Use leaf categories. Only products that exist in end categories (categories without other child categories)
      */
     const FLAG_LEAF_CATS = 'leaf_categories';
+
+    /**
+     * Also so products not in a category.
+     */
+    const FLAG_REQUIRE_CAT = 'require_category';
+
     /** @var array */
     private $_categoryCache = [];
 
@@ -41,7 +47,8 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
      */
     protected $_flags = [
         'no_stock_data' => true,
-        'leaf_categories' => true
+        'leaf_categories' => true,
+        'require_category' => true,
     ];
 
     /**
@@ -141,12 +148,26 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
          *
          */
         $this->joinField(
-            'request_path',
+            'request_path_full',
             'core/url_rewrite',
-            'request_path',
+            null,
             'product_id = entity_id',
-            'at_request_path.category_id IN (' . implode(',', array_keys($this->_categoryCache)) . ')',
-            'inner');
+            'at_request_path_full.category_id IN (' . implode(',', array_keys($this->_categoryCache)) . ')',
+            $this->getFlag(self::FLAG_REQUIRE_CAT) ? 'inner' : 'left');
+
+        $this->joinField(
+            'request_path_direct',
+            'core/url_rewrite',
+            null,
+            'product_id = entity_id',
+            'at_request_path_direct.category_id IS NULL',
+            'left');
+
+        $this->addExpressionAttributeToSelect(
+            'request_path',
+            new Zend_Db_Expr('COALESCE(`at_request_path_full`.`request_path`,`at_request_path_direct`.`request_path`)'),
+            []
+        );
 
 
         /**
@@ -173,7 +194,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
             new Zend_Db_Expr('GROUP_CONCAT(at_category_ids.category_id)'),
             'product_id = entity_id',
             'at_category_ids.category_id IN (' . implode(',', array_keys($this->_categoryCache)) . ')',
-            'inner');
+            $this->getFlag(self::FLAG_REQUIRE_CAT) ? 'inner' : 'left');
 
         $this->getSelect()->group('entity_id');
         return parent::_beforeLoad();
