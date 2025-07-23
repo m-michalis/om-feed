@@ -129,7 +129,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
         $this->joinField(
             'super_attribute_ids',
             'catalog/product_super_attribute',
-            new Zend_Db_Expr('GROUP_CONCAT(DISTINCT at_super.attribute_id)'),
+            new Zend_Db_Expr('GROUP_CONCAT(DISTINCT at_super_attribute_ids.attribute_id)'),
             'product_id = item_group_id',
             null,
             'left');
