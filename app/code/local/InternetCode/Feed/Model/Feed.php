@@ -126,18 +126,11 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
          * [LEFT] JOIN SUPER ATTRIBUTE IDS
          *
          */
-        $superAttrConcatSelect = Mage::getResourceModel('catalog/product_type_configurable_attribute_collection')
-            ->getSelect()
-            ->reset(Varien_Db_Select::COLUMNS)
-            ->columns([
-                'product_id',
-                'super_attribute_ids' => new Zend_Db_Expr('GROUP_CONCAT(attribute_id)')
-            ])
-            ->group('product_id');
-        $this->joinTable(
-            ['super_attr' => new Zend_Db_Expr(" ( $superAttrConcatSelect ) ")],
-            'product_id = entity_id',
+        $this->joinField(
             'super_attribute_ids',
+            'catalog/product_super_attribute',
+            new Zend_Db_Expr('GROUP_CONCAT(DISTINCT at_super.attribute_id)'),
+            'product_id = item_group_id',
             null,
             'left');
 
@@ -156,18 +149,12 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
             $this->getFlag(self::FLAG_REQUIRE_CAT) ? 'inner' : 'left');
 
         $this->joinField(
-            'request_path_direct',
-            'core/url_rewrite',
-            null,
-            'product_id = entity_id',
-            'at_request_path_direct.category_id IS NULL',
-            'left');
-
-        $this->addExpressionAttributeToSelect(
             'request_path',
-            new Zend_Db_Expr('COALESCE(`at_request_path_full`.`request_path`,`at_request_path_direct`.`request_path`)'),
-            []
-        );
+            'core/url_rewrite',
+            new Zend_Db_Expr('COALESCE(`at_request_path_full`.`request_path`,`at_request_path`.`request_path`)'),
+            'product_id = entity_id',
+            'at_request_path.category_id IS NULL',
+            'left');
 
 
         /**
@@ -191,9 +178,9 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
         $this->joinField(
             'category_ids',
             'catalog/category_product_index',
-            new Zend_Db_Expr('GROUP_CONCAT(at_category_ids.category_id)'),
+            new Zend_Db_Expr('GROUP_CONCAT(DISTINCT at_category_ids.category_id)'),
             'product_id = entity_id',
-            'at_category_ids.category_id IN (' . implode(',', array_keys($this->_categoryCache)) . ')',
+            'at_category_ids.category_id = at_request_path_full.category_id',
             $this->getFlag(self::FLAG_REQUIRE_CAT) ? 'inner' : 'left');
 
         $this->getSelect()->group('entity_id');
@@ -245,23 +232,36 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
         }
 
         $nameID = Mage::getModel('catalog/category')->getResource()->getAttribute('name')->getId();
-        $rootID = $this->getStore()->getRootCategoryId();
+        $storeID = $this->getStore()->getId();
 
-        $crumbsQuery = new Zend_Db_Expr("SELECT * FROM (
-WITH RECURSIVE seq(n) AS (SELECT 1
-                          UNION ALL
-                          SELECT n + 1
-                          FROM seq
-                          WHERE n < 10)
-SELECT ct.entity_id                                      as category_id,
-       ct.level                                          as category_level,
-       GROUP_CONCAT(cn.value ORDER BY n SEPARATOR ' > ') AS category_path
+        $crumbsQuery = new Zend_Db_Expr("WITH RECURSIVE
+    seq(n) AS ( -- 1 … 10 helper to walk every “/” in ct.path, 
+        SELECT 3 -- with 3 we skip Root Catalog
+        UNION ALL
+        SELECT n + 1
+        FROM seq
+        WHERE n < 10)
+SELECT ct.entity_id AS category_id,
+       ct.level     AS category_level,
+
+       GROUP_CONCAT(
+               COALESCE(cn_store.value, cn_default.value)
+               ORDER BY n SEPARATOR ' > '
+       )            AS category_path
+
 FROM catalog_category_entity ct
          JOIN seq ON CHAR_LENGTH(ct.path) - CHAR_LENGTH(REPLACE(ct.path, '/', '')) >= n - 1
-         JOIN catalog_category_entity_varchar cn
-              ON cn.entity_id = SUBSTRING_INDEX(SUBSTRING_INDEX(ct.path, '/', n), '/', -1) and
-                 attribute_id = $nameID and cn.entity_id > $rootID
-GROUP BY ct.entity_id, ct.path) categories WHERE category_id in ( $deepestCategorySelect )");
+         LEFT JOIN catalog_category_entity_varchar cn_store
+                   ON cn_store.entity_id = SUBSTRING_INDEX(SUBSTRING_INDEX(ct.path, '/', n), '/', -1)
+                       AND cn_store.attribute_id = $nameID
+                       AND cn_store.store_id = $storeID
+         LEFT JOIN catalog_category_entity_varchar cn_default
+                   ON cn_default.entity_id = SUBSTRING_INDEX(SUBSTRING_INDEX(ct.path, '/', n), '/', -1)
+                       AND cn_default.attribute_id = $nameID
+                       AND cn_default.store_id = 0
+
+WHERE ct.entity_id IN ($deepestCategorySelect)
+GROUP BY ct.entity_id, ct.path;");
 
         $this->_categoryCache = $this->_getReadAdapter()->fetchAssoc($crumbsQuery);
 
