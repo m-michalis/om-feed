@@ -4,7 +4,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
 {
 
     /**
-     * removes children from collection and adds them to their respective parent's 'associated_products'
+     * Removes children from collection and adds them to their respective parent's 'associated_products'
      */
     const FLAG_ASSOCIATIONS = 'configurable_associations';
 
@@ -14,7 +14,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
     const FLAG_LEAF_CATS = 'leaf_categories';
 
     /**
-     * Also so products not in a category.
+     * If enabled, only products that exist in a category will be returned.
      */
     const FLAG_REQUIRE_CAT = 'require_category';
 
@@ -46,9 +46,9 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
      * @var true[]
      */
     protected $_flags = [
-        'no_stock_data' => true,
-        'leaf_categories' => true,
-        'require_category' => true,
+        'no_stock_data' => true, # we join stock our own way
+        self::FLAG_LEAF_CATS => true,
+        self::FLAG_REQUIRE_CAT => true,
     ];
 
     /**
@@ -145,7 +145,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
             'core/url_rewrite',
             null,
             'product_id = entity_id',
-            'at_request_path_full.category_id IN (' . implode(',', array_keys($this->_categoryCache)) . ')',
+            'at_request_path_full.store_id = '.$this->getStoreId().' AND at_request_path_full.category_id IN (' . implode(',', array_keys($this->_categoryCache)) . ')',
             $this->getFlag(self::FLAG_REQUIRE_CAT) ? 'inner' : 'left');
 
         $this->joinField(
@@ -153,7 +153,7 @@ class InternetCode_Feed_Model_Feed extends Mage_Catalog_Model_Resource_Product_C
             'core/url_rewrite',
             new Zend_Db_Expr('COALESCE(`at_request_path_full`.`request_path`,`at_request_path`.`request_path`)'),
             'product_id = entity_id',
-            'at_request_path.category_id IS NULL',
+            'at_request_path.store_id = '.$this->getStoreId().' AND at_request_path.category_id IS NULL',
             'left');
 
 
