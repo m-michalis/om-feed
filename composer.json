@@ -2,9 +2,9 @@
   "name": "m-michalis/om-feed",
   "type": "magento-module",
   "license": "GPL-3.0",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "homepage": "https://github.com/m-michalis/om-feed",
-  "description":"Assemble products with up to spec sql query",
+  "description": "Assemble products with up to spec sql query. Requires MySQL 8.0+ or MariaDB 10.2+.",
   "keywords": [
     "openmage",
     "product feed",
@@ -15,10 +15,13 @@
     "php": "^8.2",
     "magento-hackathon/magento-composer-installer": "*"
   },
-  "authors":[
+  "suggest": {
+    "openmage/magento-lts": ">=20.0 - Tested with OpenMage 20.x"
+  },
+  "authors": [
     {
-      "name":"Michalis Michalis",
-      "email":"m@internetcode.gr"
+      "name": "Michalis Michalis",
+      "email": "m@internetcode.gr"
     }
   ]
 }

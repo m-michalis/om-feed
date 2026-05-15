@@ -4,6 +4,10 @@
         <InternetCode_Feed>
             <active>true</active>
             <codePool>local</codePool>
+            <depends>
+                <Mage_Catalog/>
+                <Mage_CatalogInventory/>
+            </depends>
         </InternetCode_Feed>
     </modules>
 </config>
