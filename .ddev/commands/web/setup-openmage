@@ -1,0 +1,176 @@
+#!/bin/bash
+
+## Description: Install OpenMage with sample data and mount modules
+## Usage: setup-openmage
+## Example: ddev setup-openmage
+## ProjectTypes: magento
+
+set -euo pipefail
+
+WEBROOT="/var/www/html/openmage"
+PROJECT_ROOT="/var/www/html"
+SAMPLE_DATA_DIR="${PROJECT_ROOT}/.ddev/.sampleData"
+SAMPLE_DATA_URL="https://github.com/Vinai/compressed-magento-sample-data/raw/master/compressed-magento-sample-data-1.9.2.4.tgz"
+SAMPLE_DATA_FILE="sample_data.tgz"
+
+DB_HOST="db"
+DB_USER="db"
+DB_PASS="db"
+DB_NAME="db"
+
+ADMIN_USER="admin"
+ADMIN_PASS="veryl0ngpassw0rd"
+ADMIN_EMAIL="admin@example.com"
+
+# Check if already installed (skip DDEV-generated local.xml)
+if [ -f "${WEBROOT}/app/etc/local.xml" ]; then
+    if ! grep -q "ddev-generated" "${WEBROOT}/app/etc/local.xml" 2>/dev/null; then
+        echo "OpenMage is already installed."
+        echo "Frontend: ${DDEV_PRIMARY_URL}"
+        echo "Admin:    ${DDEV_PRIMARY_URL}/admin (${ADMIN_USER} / ${ADMIN_PASS})"
+        echo ""
+        echo "To reinstall: ddev reset-openmage && ddev setup-openmage"
+        exit 0
+    fi
+fi
+
+echo "=== Setting up OpenMage ==="
+
+# --- 1. Composer project ---
+cd "${WEBROOT}"
+
+if [ ! -f "composer.json" ]; then
+    echo "[1/6] Initializing Composer project..."
+    composer init \
+        --name "internetcode/om-feed-dev" \
+        --type "project" \
+        --license "proprietary" \
+        --stability "dev" \
+        --no-interaction --quiet
+
+    # Magento composer installer settings
+    composer config extra.magento-root-dir "."
+    composer config extra.magento-deploystrategy "symlink"
+    composer config extra.magento-force true
+    composer config extra.magento-core-package-type "magento-source"
+
+    # Allow plugins
+    composer config allow-plugins.magento-hackathon/magento-composer-installer true
+    composer config allow-plugins.aydin-hassan/magento-core-composer-installer true
+    composer config allow-plugins.openmage/composer-plugin true
+    composer config allow-plugins.cweagans/composer-patches true
+
+    # Path repositories for local modules
+    composer config repositories.om-feed '{"type":"path","url":"../","options":{"symlink":true}}'
+    composer config repositories.om-feed-test '{"type":"path","url":"../dev/test-module","options":{"symlink":true}}'
+
+    # Require packages
+    composer require --no-update \
+        "aydin-hassan/magento-core-composer-installer:^2.1.0" \
+        "openmage/magento-lts:^20.0" \
+        "m-michalis/om-feed:@dev" \
+        "m-michalis/om-feed-test:@dev"
+else
+    echo "[1/6] Composer project already initialized."
+fi
+
+# --- 2. Install dependencies ---
+echo "[2/6] Installing Composer dependencies..."
+composer install --prefer-dist --no-progress
+composer require --dev phpunit/phpunit:^10.0 --no-progress 2>/dev/null || true
+
+# --- 3. Sample data ---
+echo "[3/6] Preparing sample data..."
+mkdir -p "${SAMPLE_DATA_DIR}"
+
+if [ ! -f "${SAMPLE_DATA_DIR}/${SAMPLE_DATA_FILE}" ]; then
+    echo "  Downloading sample data (~65 MB)..."
+    curl -sL "${SAMPLE_DATA_URL}" -o "${SAMPLE_DATA_DIR}/${SAMPLE_DATA_FILE}"
+else
+    echo "  Using cached sample data."
+fi
+
+TEMP_DIR=$(mktemp -d)
+tar xf "${SAMPLE_DATA_DIR}/${SAMPLE_DATA_FILE}" -C "${TEMP_DIR}"
+SAMPLE_DIR=$(find "${TEMP_DIR}" -maxdepth 1 -type d -name "magento-sample-data*" | head -1)
+
+if [ -z "${SAMPLE_DIR}" ]; then
+    echo "ERROR: Could not find sample data directory in archive."
+    rm -rf "${TEMP_DIR}"
+    exit 1
+fi
+
+echo "  Copying media and skin files..."
+mkdir -p "${WEBROOT}/media" "${WEBROOT}/skin"
+cp -r "${SAMPLE_DIR}/media/"* "${WEBROOT}/media/" 2>/dev/null || true
+cp -r "${SAMPLE_DIR}/skin/"* "${WEBROOT}/skin/" 2>/dev/null || true
+
+SAMPLE_SQL=$(find "${SAMPLE_DIR}" -name "*.sql" | head -1)
+
+# --- 4. Remove DDEV-generated local.xml (install.php needs clean slate) ---
+if grep -q "ddev-generated" "${WEBROOT}/app/etc/local.xml" 2>/dev/null; then
+    rm -f "${WEBROOT}/app/etc/local.xml"
+fi
+
+# --- 5. Install OpenMage ---
+echo "[4/6] Running OpenMage installer..."
+php -f "${WEBROOT}/install.php" -- \
+    --license_agreement_accepted 'yes' \
+    --locale 'en_US' \
+    --timezone 'UTC' \
+    --default_currency 'USD' \
+    --db_host "${DB_HOST}" \
+    --db_name "${DB_NAME}" \
+    --db_user "${DB_USER}" \
+    --db_pass "${DB_PASS}" \
+    --db_prefix '' \
+    --url "${DDEV_PRIMARY_URL}/" \
+    --use_rewrites 'yes' \
+    --use_secure 'yes' \
+    --secure_base_url "${DDEV_PRIMARY_URL}/" \
+    --use_secure_admin 'yes' \
+    --admin_username "${ADMIN_USER}" \
+    --admin_lastname 'User' \
+    --admin_firstname 'Admin' \
+    --admin_email "${ADMIN_EMAIL}" \
+    --admin_password "${ADMIN_PASS}" \
+    --session_save 'files' \
+    --admin_frontname 'admin' \
+    --backend_frontname 'admin' \
+    --enable_charts 'yes' \
+    --skip_url_validation 'yes'
+
+# --- 6. Import sample data SQL ---
+if [ -n "${SAMPLE_SQL:-}" ]; then
+    echo "[5/6] Importing sample data SQL..."
+    mysql -h "${DB_HOST}" -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" < "${SAMPLE_SQL}"
+else
+    echo "[5/6] No sample data SQL found, skipping."
+fi
+
+rm -rf "${TEMP_DIR}"
+
+# --- 7. Reindex ---
+echo "[6/7] Reindexing..."
+php -f "${WEBROOT}/shell/indexer.php" reindexall 2>/dev/null || true
+
+# --- 8. Finalize ---
+echo "[7/7] Finalizing..."
+mkdir -p "${WEBROOT}/var/export"
+chmod -R g+w "${WEBROOT}/var" "${WEBROOT}/media" 2>/dev/null || true
+
+rm -rf "${WEBROOT}/var/cache/"*
+
+php -r "
+require '${WEBROOT}/app/Mage.php';
+Mage::app()->cleanCache();
+"
+
+echo ""
+echo "=== Setup Complete ==="
+echo "Frontend: ${DDEV_PRIMARY_URL}"
+echo "Admin:    ${DDEV_PRIMARY_URL}/admin"
+echo "Login:    ${ADMIN_USER} / ${ADMIN_PASS}"
+echo ""
+echo "Generate test feed:"
+echo "  ddev exec 'cd openmage && php shell/generate_test_feed.php'"

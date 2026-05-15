@@ -1,0 +1,10 @@
+#!/bin/bash
+
+## Description: Run om-feed PHPUnit tests
+## Usage: test [flags]
+## Example: ddev test
+## Example: ddev test --filter=testCollectionLoadsProducts
+## ProjectTypes: magento
+
+cd /var/www/html/openmage
+php vendor/bin/phpunit --configuration /var/www/html/phpunit.xml "$@"

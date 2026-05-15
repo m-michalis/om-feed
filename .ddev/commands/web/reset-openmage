@@ -1,0 +1,46 @@
+#!/bin/bash
+
+## Description: Reset OpenMage installation (wipe database and config)
+## Usage: reset-openmage [--full]
+## Example: ddev reset-openmage
+## Example: ddev reset-openmage --full
+## ProjectTypes: magento
+
+set -euo pipefail
+
+WEBROOT="/var/www/html/openmage"
+
+FULL_RESET=false
+for arg in "$@"; do
+    case $arg in
+        --full) FULL_RESET=true ;;
+    esac
+done
+
+echo "=== Resetting OpenMage ==="
+
+# Drop and recreate database
+echo "Dropping database..."
+mysql -h db -u db -pdb -e "DROP DATABASE IF EXISTS db; CREATE DATABASE db;"
+echo "  Database reset."
+
+# Remove installation config
+rm -f "${WEBROOT}/app/etc/local.xml"
+echo "  Removed local.xml."
+
+# Clean var
+rm -rf "${WEBROOT}/var/cache/"* \
+       "${WEBROOT}/var/session/"* \
+       "${WEBROOT}/var/log/"* \
+       "${WEBROOT}/var/export/"* 2>/dev/null || true
+echo "  Cleaned var/."
+
+if [ "$FULL_RESET" = true ]; then
+    echo "  Full reset: removing openmage/ directory..."
+    rm -rf "${WEBROOT}"
+    mkdir -p "${WEBROOT}"
+    echo "  Done — will re-download everything on next setup."
+fi
+
+echo ""
+echo "Reset complete. Run 'ddev setup-openmage' to reinstall."

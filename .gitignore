@@ -1,1 +1,6 @@
 .idea
+
+# DDEV ephemeral OpenMage instance
+/openmage/
+.ddev/.sampleData/
+/.phpunit.cache/test-results
