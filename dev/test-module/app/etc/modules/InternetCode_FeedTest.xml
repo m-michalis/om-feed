@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <InternetCode_FeedTest>
+            <active>true</active>
+            <codePool>local</codePool>
+            <depends>
+                <InternetCode_Feed/>
+            </depends>
+        </InternetCode_FeedTest>
+    </modules>
+</config>

@@ -1,0 +1,9 @@
+{
+    "name": "m-michalis/om-feed-test",
+    "type": "magento-module",
+    "description": "Test module for om-feed — generates a sample XML product feed using sample data",
+    "license": "proprietary",
+    "require": {
+        "magento-hackathon/magento-composer-installer": "*"
+    }
+}

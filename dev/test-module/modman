@@ -1,0 +1,4 @@
+# Modman mappings for InternetCode_FeedTest
+app/code/local/InternetCode/FeedTest            app/code/local/InternetCode/FeedTest
+app/etc/modules/InternetCode_FeedTest.xml       app/etc/modules/InternetCode_FeedTest.xml
+shell/generate_test_feed.php                    shell/generate_test_feed.php
