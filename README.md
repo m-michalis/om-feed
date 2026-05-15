@@ -18,6 +18,12 @@ Made for developers.
 
 I encourage you to check `app/code/local/InternetCode/Feed/Model/Feed.php`
 
+## Requirements
+
+- **PHP** 8.2+
+- **MySQL 8.0+** or **MariaDB 10.2+** (the module uses `WITH RECURSIVE` CTEs for category breadcrumbs)
+- OpenMage 20.x or Magento 1.9.x
+
 ## Installation
 
 ### Composer
@@ -199,9 +205,28 @@ Mage::getModel('catalog/product')->getCollection()
 
 
 
+## Large Catalogs
+
+The collection loads all matching products into memory at once. For catalogs with 100k+ products,
+use `setPageSize()` and iterate in batches to avoid memory exhaustion:
+
+```php
+$pageSize = 5000;
+$page = 1;
+$feed->setPageSize($pageSize);
+
+do {
+    $feed->setCurPage($page);
+    $feed->generate('handler', $path, [$this, 'writeProduct']);
+    $feed->clear();
+    $page++;
+} while ($feed->getSize() > ($page - 1) * $pageSize);
+```
+
 ## Compatibility (tested with)
 - OpenMage 20.0.x
 - MariaDB 11.4
+- MySQL 8.0+
 - Magento 1.9.x
 
 ## License
