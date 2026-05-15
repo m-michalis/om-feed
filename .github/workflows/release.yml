@@ -1,0 +1,39 @@
+name: Automated Release
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Checkout full history so we can push a tag later
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Parse composer.json → VERSION
+      - id: version
+        run: echo "VERSION=$(jq -r '.version' composer.json)" >> $GITHUB_OUTPUT
+
+      # Does the tag already exist?
+      - id: tagcheck
+        run: |
+          git fetch --tags
+          if git rev-parse "v${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
+            echo "EXISTS=true"  >> $GITHUB_OUTPUT
+          else
+            echo "EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Create tag + release only when it doesn’t exist
+      - name: Create Git tag & GitHub Release
+        if: steps.tagcheck.outputs.EXISTS == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v$VERSION" --generate-notes
